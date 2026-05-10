@@ -17,8 +17,10 @@ ADD_MESSAGE_1 = """```To add this bot to your own Server, click the following li
                 ```\n<https://discordapp.com/oauth2/authorize?client_id="""
 ADD_MESSAGE_2 = "&scope=bot>"
 
-DEFAULT_VOLUME = 7
+DEFAULT_VOLUME = 100
 IDLE_DISCONNECT_SECONDS = 180
+POMODORO_FOCUS_SECONDS = 25 * 60
+POMODORO_BREAK_SECONDS = 5 * 60
 
 INFO_HISTORY_TITLE = "Songs Played:"
 MAX_HISTORY_LENGTH = 10

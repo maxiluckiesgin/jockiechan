@@ -123,10 +123,15 @@ class General(commands.Cog):
         await ctx.send("Pomodoro loop started: 25 minutes focus, 5 minutes break. Type !pomodoro again to stop.")
 
     async def run_pomodoro(self, channel, guild, task_key):
+        timer_message = None
         try:
             while True:
-                await channel.send("Focus session started. 25 minutes.")
-                await asyncio.sleep(25 * 60)
+                timer_message = await self.run_timer_phase(
+                    channel,
+                    timer_message,
+                    "Focus",
+                    config.POMODORO_FOCUS_SECONDS,
+                )
 
                 music_paused = self.pause_guild_music(guild)
                 if music_paused:
@@ -134,7 +139,12 @@ class General(commands.Cog):
                 else:
                     await channel.send("Focus session done. Break started: 5 minutes.")
 
-                await asyncio.sleep(5 * 60)
+                timer_message = await self.run_timer_phase(
+                    channel,
+                    timer_message,
+                    "Break",
+                    config.POMODORO_BREAK_SECONDS,
+                )
                 if music_paused:
                     self.resume_guild_music(guild)
                     await channel.send("Break done. Music resumed. Starting next focus session.")
@@ -144,6 +154,38 @@ class General(commands.Cog):
             return
         finally:
             self.pomodoro_tasks.pop(task_key, None)
+
+    async def run_timer_phase(self, channel, timer_message, label, total_seconds):
+        start_time = time.monotonic()
+        while True:
+            elapsed_seconds = min(int(time.monotonic() - start_time), total_seconds)
+            content = self.format_timer_message(label, elapsed_seconds, total_seconds)
+            if timer_message is None:
+                timer_message = await channel.send(content)
+            else:
+                await timer_message.edit(content=content)
+
+            if elapsed_seconds >= total_seconds:
+                return timer_message
+
+            remaining_seconds = total_seconds - elapsed_seconds
+            await asyncio.sleep(min(60, remaining_seconds))
+
+    def format_timer_message(self, label, elapsed_seconds, total_seconds):
+        progress_width = 20
+        filled = int(progress_width * elapsed_seconds / total_seconds)
+        progress_bar = "[" + ("#" * filled) + ("-" * (progress_width - filled)) + "]"
+        remaining_seconds = max(total_seconds - elapsed_seconds, 0)
+        return (
+            label + " timer\n"
+            + progress_bar + " "
+            + self.format_seconds(remaining_seconds) + " remaining"
+        )
+
+    def format_seconds(self, seconds):
+        minutes = seconds // 60
+        seconds = seconds % 60
+        return str(minutes).zfill(2) + ":" + str(seconds).zfill(2)
 
     def pause_guild_music(self, guild):
         if guild is None or guild.voice_client is None:
