@@ -411,6 +411,34 @@ class AudioController(object):
         title = re.sub(r'[^a-z0-9]+', ' ', title)
         return " ".join(title.split())
 
+    def clean_artist_name(self, artist):
+        if artist is None:
+            return None
+        artist = str(artist).strip()
+        artist = re.sub(r'\s*-\s*topic$', '', artist, flags=re.IGNORECASE)
+        artist = re.sub(r'\s*official\s*$', '', artist, flags=re.IGNORECASE)
+        artist = re.sub(r'\s*(vevo|records|recordings|music)\s*$', '', artist, flags=re.IGNORECASE)
+        artist = artist.strip(" -|")
+        return artist or None
+
+    def extract_artist_name(self, extracted_info):
+        for key in ('artist', 'creator', 'uploader', 'channel'):
+            artist = self.clean_artist_name(extracted_info.get(key))
+            if artist:
+                return artist
+
+        title = extracted_info.get('title')
+        if not title:
+            return None
+
+        title = re.sub(r'\([^)]*\)|\[[^]]*\]', ' ', title).strip()
+        for separator in (' - ', ' – ', ' — ', ' | '):
+            if separator in title:
+                artist = self.clean_artist_name(title.split(separator, 1)[0])
+                if artist:
+                    return artist
+        return None
+
     def remember_played_track(self, extracted_info):
         video_id = extracted_info.get('id') or self.get_youtube_id_from_url(extracted_info.get('webpage_url') or "")
         if video_id:
@@ -460,8 +488,8 @@ class AudioController(object):
         if not title:
             return None
 
-        preferred_artist = title
-        query = preferred_artist
+        preferred_artist = self.extract_artist_name(extracted_info) or title
+        query = preferred_artist + " official music"
 
         current_id = extracted_info.get('id')
         current_url = extracted_info.get('webpage_url')
