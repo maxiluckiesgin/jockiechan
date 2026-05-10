@@ -422,10 +422,9 @@ class AudioController(object):
         return artist or None
 
     def extract_artist_name(self, extracted_info):
-        for key in ('artist', 'creator', 'uploader', 'channel'):
-            artist = self.clean_artist_name(extracted_info.get(key))
-            if artist:
-                return artist
+        artist = self.clean_artist_name(extracted_info.get('artist'))
+        if artist:
+            return artist
 
         title = extracted_info.get('title')
         if not title:
