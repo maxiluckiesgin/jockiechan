@@ -20,7 +20,6 @@ class General(commands.Cog):
         self.kick_timer_tasks = {}
         self.voice_chat_activity = {}
         self.pomodoro_tasks = {}
-        self.pomodoro_resume_events = {}
 
     def get_current_guild(self, ctx):
         if ctx.guild is not None:
@@ -114,34 +113,37 @@ class General(commands.Cog):
         task_key = (ctx.guild.id if ctx.guild is not None else None, ctx.channel.id)
         existing_task = self.pomodoro_tasks.get(task_key)
         if existing_task is not None and not existing_task.done():
-            await ctx.send("A Pomodoro timer is already running in this channel.")
+            existing_task.cancel()
+            await ctx.send("Pomodoro stopped.")
             return
 
-        resume_event = asyncio.Event()
-        self.pomodoro_resume_events[ctx.guild.id if ctx.guild is not None else None] = resume_event
         self.pomodoro_tasks[task_key] = self.bot.loop.create_task(
-            self.run_pomodoro(ctx.channel, ctx.guild, task_key, resume_event)
+            self.run_pomodoro(ctx.channel, ctx.guild, task_key)
         )
-        await ctx.send("Pomodoro started: 25 minutes focus. Break timer starts when you type !resume.")
+        await ctx.send("Pomodoro loop started: 25 minutes focus, 5 minutes break. Type !pomodoro again to stop.")
 
-    async def run_pomodoro(self, channel, guild, task_key, resume_event):
+    async def run_pomodoro(self, channel, guild, task_key):
         try:
-            await asyncio.sleep(25 * 60)
-            music_paused = self.pause_guild_music(guild)
-            if music_paused:
-                await channel.send("Focus time is done. Music paused. Type !resume to start your 5 minute break timer.")
-            else:
-                await channel.send("Focus time is done. Type !resume to start your 5 minute break timer.")
-            await resume_event.wait()
-            await channel.send("Break timer started. Take a 5 minute break.")
-            await asyncio.sleep(5 * 60)
-            self.resume_guild_music(guild)
-            await channel.send("Break is done. Pomodoro complete.")
+            while True:
+                await channel.send("Focus session started. 25 minutes.")
+                await asyncio.sleep(25 * 60)
+
+                music_paused = self.pause_guild_music(guild)
+                if music_paused:
+                    await channel.send("Focus session done. Music paused. Break started: 5 minutes.")
+                else:
+                    await channel.send("Focus session done. Break started: 5 minutes.")
+
+                await asyncio.sleep(5 * 60)
+                if music_paused:
+                    self.resume_guild_music(guild)
+                    await channel.send("Break done. Music resumed. Starting next focus session.")
+                else:
+                    await channel.send("Break done. Starting next focus session.")
         except asyncio.CancelledError:
             return
         finally:
             self.pomodoro_tasks.pop(task_key, None)
-            self.pomodoro_resume_events.pop(guild.id if guild is not None else None, None)
 
     def pause_guild_music(self, guild):
         if guild is None or guild.voice_client is None:
@@ -157,14 +159,6 @@ class General(commands.Cog):
         if not guild.voice_client.is_paused():
             return False
         guild.voice_client.resume()
-        return True
-
-    def start_pomodoro_break(self, guild):
-        task_key = guild.id if guild is not None else None
-        resume_event = self.pomodoro_resume_events.get(task_key)
-        if resume_event is None or resume_event.is_set():
-            return False
-        resume_event.set()
         return True
 
     @commands.command(name='set', description=config.HELP_SET_SHORT, help=config.HELP_SET_SHORT)
