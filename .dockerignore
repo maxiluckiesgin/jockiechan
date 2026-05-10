@@ -6,3 +6,8 @@ __pycache__/
 ffmpeg.exe
 cookies/
 *.cookies.txt
+*.zip
+.venv/
+venv/
+build/
+dist/

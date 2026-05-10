@@ -60,7 +60,7 @@ To stop it:
 docker compose down
 ```
 
-The Docker image installs `ffmpeg`, `libopus0`, and the Python dependencies from `requirements.txt`.
+The Docker image installs `ffmpeg`, `libopus0`, and the Python dependencies from `requirements.txt`. The Dockerfile uses a multi-stage build: dependencies are built as wheels in a builder stage, then copied into a smaller runtime image. With BuildKit enabled, pip downloads are cached between builds.
 
 ### YouTube Cookies
 
