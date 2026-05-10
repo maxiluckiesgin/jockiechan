@@ -295,9 +295,10 @@ class AudioController(object):
     def search_youtube(self, query, limit=5):
         """Searches YouTube and returns a list of result dictionaries."""
 
+        search_limit = max(limit, 15)
         try:
             with yt_dlp.YoutubeDL(build_ytdlp_options(YTDLP_SEARCH_OPTIONS)) as downloader:
-                search_info = downloader.extract_info("ytsearch" + str(limit) + ":" + query, download=False)
+                search_info = downloader.extract_info("ytsearch" + str(search_limit) + ":" + query, download=False)
         except Exception as error:
             print("Could not search youtube for:", query)
             traceback.print_exception(type(error), error, error.__traceback__)
@@ -311,14 +312,66 @@ class AudioController(object):
             url = self.get_entry_url(entry)
             if url is None:
                 continue
-            results.append({
+
+            duration = entry.get('duration')
+            if self.is_too_long(duration):
+                continue
+            if not self.is_music_category(entry):
+                continue
+
+            result = {
                 'id': entry.get('id'),
                 'title': entry.get('title') or 'Untitled',
                 'url': url,
-                'duration': entry.get('duration'),
+                'duration': duration,
                 'uploader': entry.get('uploader') or entry.get('channel'),
-            })
-        return results
+                'categories': entry.get('categories'),
+            }
+            result['score'] = self.get_search_result_score(query, result)
+            results.append(result)
+        results.sort(key=lambda result: result['score'], reverse=True)
+        return results[:limit]
+
+    def is_too_long(self, duration):
+        if duration is None:
+            return False
+        try:
+            return int(duration) > 10 * 60
+        except (TypeError, ValueError):
+            return False
+
+    def is_music_category(self, entry):
+        categories = entry.get('categories')
+        if not categories:
+            return True
+        normalized_categories = [str(category).lower() for category in categories]
+        return any(category == 'music' for category in normalized_categories)
+
+    def get_query_artist(self, query):
+        if " - " in query:
+            return query.split(" - ", 1)[0].strip()
+        return query.strip()
+
+    def get_search_result_score(self, query, result):
+        score = 0
+        query_text = self.normalize_title(query)
+        artist_text = self.normalize_title(self.get_query_artist(query))
+        title_text = self.normalize_title(result.get('title'))
+        uploader_text = self.normalize_title(result.get('uploader'))
+
+        if "official" in title_text:
+            score += 50
+        if "music video" in title_text or "official video" in title_text:
+            score += 30
+        if "lyrics" in title_text or "cover" in title_text or "reaction" in title_text:
+            score -= 25
+        if artist_text and (artist_text == uploader_text or artist_text in uploader_text or uploader_text in artist_text):
+            score += 45
+        if query_text and query_text in title_text:
+            score += 20
+        if result.get('categories'):
+            score += 10
+        return score
 
     def get_entry_url(self, entry):
         if entry.get('webpage_url'):
