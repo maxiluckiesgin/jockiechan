@@ -1,4 +1,5 @@
 import discord
+import logging
 import traceback
 from discord.ext import commands
 
@@ -6,6 +7,8 @@ from config.config import *
 from musicbot.audiocontroller import AudioController
 from musicbot.utils import guild_to_audiocontroller
 
+
+logging.getLogger("discord.player").setLevel(logging.ERROR)
 
 initial_extensions = ['musicbot.commands.music', 'musicbot.commands.general']
 intents = discord.Intents.default()

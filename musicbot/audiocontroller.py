@@ -4,6 +4,7 @@ import os
 import urllib.parse
 import re
 import time
+import subprocess
 from collections import deque
 from string import printable
 
@@ -52,12 +53,14 @@ YTDLP_SEARCH_OPTIONS = {
 }
 
 FFMPEG_BEFORE_OPTIONS = (
+    '-nostdin '
     '-reconnect 1 '
     '-reconnect_streamed 1 '
     '-reconnect_delay_max 5 '
     '-reconnect_on_network_error 1 '
     '-reconnect_on_http_error 4xx,5xx'
 )
+FFMPEG_OPTIONS = '-vn -loglevel error'
 
 
 def playing_string(title):
@@ -632,6 +635,8 @@ class AudioController(object):
             discord.FFmpegPCMAudio(
                 extracted_info['url'],
                 before_options=FFMPEG_BEFORE_OPTIONS,
+                options=FFMPEG_OPTIONS,
+                stderr=subprocess.DEVNULL,
             ),
             after=lambda e: self.next_song(e),
         )
