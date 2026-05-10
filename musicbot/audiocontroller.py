@@ -4,7 +4,6 @@ import os
 import urllib.parse
 import re
 import time
-import subprocess
 from collections import deque
 from string import printable
 
@@ -636,7 +635,6 @@ class AudioController(object):
                 extracted_info['url'],
                 before_options=FFMPEG_BEFORE_OPTIONS,
                 options=FFMPEG_OPTIONS,
-                stderr=subprocess.DEVNULL,
             ),
             after=lambda e: self.next_song(e),
         )
