@@ -120,10 +120,11 @@ class General(commands.Cog):
         self.pomodoro_tasks[task_key] = self.bot.loop.create_task(
             self.run_pomodoro(ctx.channel, ctx.guild, task_key)
         )
-        await ctx.send("Pomodoro loop started: 25 minutes focus, 5 minutes break. Type !pomodoro again to stop.")
+        await ctx.send("Pomodoro loop started: 25 minutes focus, 5 minutes break, 30 minutes after every 4 focus sessions. Type !pomodoro again to stop.")
 
     async def run_pomodoro(self, channel, guild, task_key):
         timer_message = None
+        completed_focus_sessions = 0
         try:
             while True:
                 timer_message = await self.run_timer_phase(
@@ -132,24 +133,29 @@ class General(commands.Cog):
                     "Focus",
                     config.POMODORO_FOCUS_SECONDS,
                 )
+                completed_focus_sessions += 1
+                is_long_break = completed_focus_sessions % config.POMODORO_LONG_BREAK_INTERVAL == 0
+                break_seconds = config.POMODORO_LONG_BREAK_SECONDS if is_long_break else config.POMODORO_BREAK_SECONDS
+                break_minutes = break_seconds // 60
+                break_label = "Long break" if is_long_break else "Break"
 
                 music_paused = self.pause_guild_music(guild)
                 if music_paused:
-                    await channel.send("Focus session done. Music paused. Break started: 5 minutes.")
+                    await channel.send("Focus session done. Music paused. " + break_label + " started: " + str(break_minutes) + " minutes.")
                 else:
-                    await channel.send("Focus session done. Break started: 5 minutes.")
+                    await channel.send("Focus session done. " + break_label + " started: " + str(break_minutes) + " minutes.")
 
                 timer_message = await self.run_timer_phase(
                     channel,
                     timer_message,
-                    "Break",
-                    config.POMODORO_BREAK_SECONDS,
+                    break_label,
+                    break_seconds,
                 )
                 if music_paused:
                     self.resume_guild_music(guild)
-                    await channel.send("Break done. Music resumed. Starting next focus session.")
+                    await channel.send(break_label + " done. Music resumed. Starting next focus session.")
                 else:
-                    await channel.send("Break done. Starting next focus session.")
+                    await channel.send(break_label + " done. Starting next focus session.")
         except asyncio.CancelledError:
             return
         finally:
