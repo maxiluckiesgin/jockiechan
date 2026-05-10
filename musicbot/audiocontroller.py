@@ -61,21 +61,11 @@ FFMPEG_BEFORE_OPTIONS = (
 
 def playing_string(title):
     """Formats the name of the current song to better fit the nickname format."""
-    filter(lambda x: x in set(printable), title)
-    title_parts = title.split(" ")
-    short_title = ""
-
-    if len(title_parts) == 1:
-        short_title = title[0:29]
-    else:
-        for part in title_parts:
-            if len(short_title + part) > 28:
-                break
-            if short_title != "":
-                short_title += " "
-            short_title += part
-
-    return "[" + short_title.replace("(", "|") + "]"
+    if title is None:
+        return config.DEFAULT_NICKNAME
+    short_title = "".join(character for character in title if character in printable).strip()
+    short_title = short_title.replace("(", "").replace(")", "")
+    return short_title[:32] or config.DEFAULT_NICKNAME
 
 
 class AudioController(object):
