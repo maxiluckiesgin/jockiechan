@@ -292,7 +292,7 @@ class AudioController(object):
             return results[0]['url']
         return None
 
-    def search_youtube(self, query, limit=5):
+    def search_youtube(self, query, limit=5, autoplay=False, preferred_artist=None):
         """Searches YouTube and returns a list of result dictionaries."""
 
         search_limit = max(limit, 15)
@@ -327,7 +327,12 @@ class AudioController(object):
                 'uploader': entry.get('uploader') or entry.get('channel'),
                 'categories': entry.get('categories'),
             }
-            result['score'] = self.get_search_result_score(query, result)
+            result['score'] = self.get_search_result_score(
+                query,
+                result,
+                autoplay=autoplay,
+                preferred_artist=preferred_artist,
+            )
             results.append(result)
         results.sort(key=lambda result: result['score'], reverse=True)
         return results[:limit]
@@ -352,25 +357,30 @@ class AudioController(object):
             return query.split(" - ", 1)[0].strip()
         return query.strip()
 
-    def get_search_result_score(self, query, result):
+    def get_search_result_score(self, query, result, autoplay=False, preferred_artist=None):
         score = 0
         query_text = self.normalize_title(query)
-        artist_text = self.normalize_title(self.get_query_artist(query))
+        artist = preferred_artist if autoplay and preferred_artist else self.get_query_artist(query)
+        artist_text = self.normalize_title(artist)
         title_text = self.normalize_title(result.get('title'))
         uploader_text = self.normalize_title(result.get('uploader'))
 
-        if "official" in title_text:
-            score += 50
-        if "music video" in title_text or "official video" in title_text:
-            score += 30
-        if "lyrics" in title_text or "cover" in title_text or "reaction" in title_text:
-            score -= 25
-        if artist_text and (artist_text == uploader_text or artist_text in uploader_text or uploader_text in artist_text):
-            score += 45
-        if query_text and query_text in title_text:
-            score += 20
         if result.get('categories'):
-            score += 10
+            score += 20 if autoplay else 10
+        if "official" in title_text:
+            score += 40 if autoplay else 50
+        if "music video" in title_text or "official video" in title_text:
+            score += 25 if autoplay else 30
+        if artist_text and (artist_text == uploader_text or artist_text in uploader_text or uploader_text in artist_text):
+            score += 60 if autoplay else 45
+        if not autoplay and query_text and query_text in title_text:
+            score += 20
+        if "lyrics" in title_text:
+            score -= 20 if autoplay else 25
+        if "cover" in title_text or "reaction" in title_text or "karaoke" in title_text:
+            score -= 35 if autoplay else 25
+        if autoplay and ("live" in title_text or "concert" in title_text):
+            score -= 10
         return score
 
     def get_entry_url(self, entry):
@@ -461,14 +471,13 @@ class AudioController(object):
         if not title:
             return None
 
-        query = title
-        if uploader:
-            query = uploader + " songs"
+        preferred_artist = uploader or title
+        query = preferred_artist + " official music"
 
         current_id = extracted_info.get('id')
         current_url = extracted_info.get('webpage_url')
         current_title = self.normalize_title(title)
-        results = self.search_youtube(query, limit=10)
+        results = self.search_youtube(query, limit=10, autoplay=True, preferred_artist=preferred_artist)
         for result in results:
             url = result.get('url')
             if url is None:
