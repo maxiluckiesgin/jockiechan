@@ -1,8 +1,10 @@
+import asyncio
 import json
 import urllib.parse
 import urllib.error
 import urllib.request
 
+import discord
 from discord.ext import commands
 
 from musicbot import utils
@@ -114,7 +116,14 @@ class Music(commands.Cog):
         if voice_state is None or voice_state.channel is None:
             await ctx.send("Join a voice channel first.")
             return False
-        await utils.guild_to_audiocontroller[current_guild].register_voice_channel(voice_state.channel)
+        try:
+            await utils.guild_to_audiocontroller[current_guild].register_voice_channel(voice_state.channel)
+        except (asyncio.TimeoutError, TimeoutError):
+            await ctx.send("Timed out connecting to your voice channel. Try again in a few seconds.")
+            return False
+        except discord.ClientException as exc:
+            await ctx.send("Could not connect to your voice channel: " + str(exc))
+            return False
         return True
 
     @commands.command(name='yt', description=config.HELP_YT_SHORT, help=config.HELP_YT_SHORT)

@@ -116,7 +116,16 @@ class AudioController(object):
         
     async def register_voice_channel(self, channel):
         self.cancel_idle_disconnect()
-        self.voice_client = await channel.connect()
+        try:
+            self.voice_client = await channel.connect(
+                timeout=config.VOICE_CONNECT_TIMEOUT_SECONDS,
+                reconnect=True,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            voice_client = self.guild.voice_client
+            if voice_client is not None:
+                await voice_client.disconnect(force=True)
+            raise
         self.schedule_idle_disconnect()
 
     def cancel_idle_disconnect(self):
