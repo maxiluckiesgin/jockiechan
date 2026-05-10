@@ -457,12 +457,11 @@ class AudioController(object):
 
     def search_autoplay_url(self, extracted_info):
         title = extracted_info.get('title')
-        uploader = extracted_info.get('uploader') or extracted_info.get('channel') or extracted_info.get('creator')
         if not title:
             return None
 
-        preferred_artist = uploader or title
-        query = preferred_artist + " official music"
+        preferred_artist = title
+        query = preferred_artist
 
         current_id = extracted_info.get('id')
         current_url = extracted_info.get('webpage_url')
