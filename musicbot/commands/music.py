@@ -152,19 +152,20 @@ class Music(commands.Cog):
             await ctx.send("Search query is empty.")
             return
 
+        status_message = await ctx.send("Processing search...")
         audiocontroller = utils.guild_to_audiocontroller[current_guild]
         audiocontroller.announce_channel = ctx.channel
         results = audiocontroller.search_youtube(query, limit=1)
         if not results:
-            await ctx.send("No results found for: " + query)
+            await status_message.edit(content="No results found for: " + query)
             return
 
         result = results[0]
         added = await audiocontroller.add_youtube(result['url'])
         if added:
-            await ctx.send("Queued or playing: " + result['title'] + " (" + self.format_duration(result.get('duration')) + ")")
+            await status_message.edit(content="Queued or playing: " + result['title'] + " (" + self.format_duration(result.get('duration')) + ")")
         else:
-            await ctx.send("Could not play first result for: " + query)
+            await status_message.edit(content="Could not play first result for: " + query)
 
     @commands.command(name='pause', description=config.HELP_PAUSE_SHORT, help=config.HELP_PAUSE_SHORT)
     async def _pause(self, ctx):
@@ -197,8 +198,9 @@ class Music(commands.Cog):
                 not current_guild.voice_client.is_paused() and not current_guild.voice_client.is_playing()):
             await ctx.send("Nothing is playing.")
             return
+        status_message = await ctx.send("Processing skip...")
         utils.guild_to_audiocontroller[current_guild].skip()
-        await ctx.send("Skipped.")
+        await status_message.edit(content="Skipped.")
 
     @commands.command(name='loop', description=config.HELP_LOOP_SHORT, help=config.HELP_LOOP_SHORT)
     async def _loop(self, ctx, enabled: bool = None):
