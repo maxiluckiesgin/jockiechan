@@ -1,0 +1,9 @@
+services:
+  discordjockey:
+    build: .
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      YTDLP_COOKIES_FILE: /cookies/youtube.txt
+    volumes:
+      - ./cookies/youtube.txt:/cookies/youtube.txt
