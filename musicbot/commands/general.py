@@ -177,9 +177,10 @@ class General(commands.Cog):
         progress_bar = "[" + ("#" * filled) + ("-" * (progress_width - filled)) + "]"
         remaining_seconds = max(total_seconds - elapsed_seconds, 0)
         return (
-            label + " timer\n"
+            "```" + label + " timer\n"
             + progress_bar + " "
             + self.format_seconds(remaining_seconds) + " remaining"
+            + "```"
         )
 
     def format_seconds(self, seconds):
