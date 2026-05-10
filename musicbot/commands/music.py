@@ -197,9 +197,13 @@ class Music(commands.Cog):
                 not current_guild.voice_client.is_paused() and not current_guild.voice_client.is_playing()):
             await ctx.send("Nothing is playing.")
             return
+        audiocontroller = utils.guild_to_audiocontroller[current_guild]
         status_message = await ctx.send("Processing skip...")
-        utils.guild_to_audiocontroller[current_guild].skip()
-        await status_message.edit(content="Skipped.")
+        audiocontroller.skip()
+        if audiocontroller.autoplay_enabled or len(audiocontroller.playlist.playque) > 1:
+            await status_message.edit(content="Skipped. Loading next track...")
+        else:
+            await status_message.edit(content="Skipped.")
 
     @commands.command(name='loop', description=config.HELP_LOOP_SHORT, help=config.HELP_LOOP_SHORT)
     async def _loop(self, ctx, enabled: bool = None):

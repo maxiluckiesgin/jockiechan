@@ -3,6 +3,7 @@ import asyncio
 import os
 import urllib.parse
 import re
+import time
 from collections import deque
 from string import printable
 
@@ -96,6 +97,8 @@ class AudioController(object):
         self.announce_channel = None
         self.recent_video_ids = deque(maxlen=25)
         self.recent_titles = deque(maxlen=25)
+        self.extract_cache = {}
+        self.preload_tasks = {}
 
     @property
     def volume(self):
@@ -152,6 +155,7 @@ class AudioController(object):
         self.current_track_url = None
         self.current_autoplay_url = None
         self.current_extracted_info = None
+        self.cancel_preloads()
         await voice_client.disconnect()
         self.voice_client = None
         await self.guild.me.edit(nick=config.DEFAULT_NICKNAME)
@@ -187,7 +191,7 @@ class AudioController(object):
             if self.autoplay_enabled and self.current_autoplay_url is not None:
                 autoplay_url = self.current_autoplay_url
                 self.current_autoplay_url = None
-                coro = self.add_song(autoplay_url)
+                coro = self.start_autoplay_song(autoplay_url)
             else:
                 async def finish_playback():
                     await self.guild.me.edit(nick=config.DEFAULT_NICKNAME)
@@ -203,6 +207,93 @@ class AudioController(object):
         self.skip_requested = True
         if self.guild.voice_client is not None:
             self.guild.voice_client.stop()
+
+    async def start_autoplay_song(self, autoplay_url):
+        if self.announce_channel is not None:
+            await self.announce_channel.send("Loading autoplay track...")
+        return await self.add_song(autoplay_url)
+
+    def cancel_preloads(self):
+        for preload_task in self.preload_tasks.values():
+            if not preload_task.done():
+                preload_task.cancel()
+        self.preload_tasks.clear()
+
+    def get_extract_cache_key(self, youtube_link):
+        return youtube_link.split("&list=")[0]
+
+    def get_cached_extracted_info(self, youtube_link):
+        cache_key = self.get_extract_cache_key(youtube_link)
+        cached = self.extract_cache.get(cache_key)
+        if cached is None:
+            return None
+        cached_at, extracted_info = cached
+        if time.monotonic() - cached_at > config.EXTRACT_CACHE_SECONDS:
+            self.extract_cache.pop(cache_key, None)
+            return None
+        return extracted_info
+
+    def cache_extracted_info(self, youtube_link, extracted_info):
+        if extracted_info is None or extracted_info.get('url') is None:
+            return
+        cache_key = self.get_extract_cache_key(youtube_link)
+        self.extract_cache[cache_key] = (time.monotonic(), extracted_info)
+
+    def extract_youtube_info(self, youtube_link):
+        try:
+            with yt_dlp.YoutubeDL(build_ytdlp_options(YTDLP_OPTIONS)) as downloader:
+                return downloader.extract_info(youtube_link, download=False)
+        except Exception as first_error:
+            try:
+                fallback_options = build_ytdlp_options(YTDLP_OPTIONS)
+                fallback_options.pop('format', None)
+                with yt_dlp.YoutubeDL(fallback_options) as downloader:
+                    return downloader.extract_info(youtube_link, download=False)
+            except Exception as second_error:
+                print("Could not extract youtube audio from:", youtube_link)
+                traceback.print_exception(type(first_error), first_error, first_error.__traceback__)
+                print("Could not extract youtube audio with fallback from:", youtube_link)
+                traceback.print_exception(type(second_error), second_error, second_error.__traceback__)
+                return None
+
+    async def get_extracted_info(self, youtube_link):
+        youtube_link = self.get_extract_cache_key(youtube_link)
+        cached_info = self.get_cached_extracted_info(youtube_link)
+        if cached_info is not None:
+            return cached_info
+
+        preload_task = self.preload_tasks.get(youtube_link)
+        if preload_task is not None:
+            try:
+                return await asyncio.shield(preload_task)
+            except Exception as error:
+                print("Could not use preloaded youtube audio from:", youtube_link)
+                traceback.print_exception(type(error), error, error.__traceback__)
+
+        extracted_info = await asyncio.to_thread(self.extract_youtube_info, youtube_link)
+        self.cache_extracted_info(youtube_link, extracted_info)
+        return extracted_info
+
+    def preload_youtube(self, youtube_link):
+        youtube_link = self.get_extract_cache_key(youtube_link)
+        if self.get_cached_extracted_info(youtube_link) is not None:
+            return
+        preload_task = self.preload_tasks.get(youtube_link)
+        if preload_task is not None and not preload_task.done():
+            return
+        self.preload_tasks[youtube_link] = self.bot.loop.create_task(self.preload_youtube_task(youtube_link))
+
+    async def preload_youtube_task(self, youtube_link):
+        try:
+            extracted_info = await asyncio.to_thread(self.extract_youtube_info, youtube_link)
+            self.cache_extracted_info(youtube_link, extracted_info)
+            return extracted_info
+        finally:
+            self.preload_tasks.pop(youtube_link, None)
+
+    def preload_next_song(self):
+        if len(self.playlist.playque) > 1:
+            self.preload_youtube(self.playlist.playque[1])
 
     def format_duration(self, duration):
         if duration is None:
@@ -272,6 +363,7 @@ class AudioController(object):
         self.playlist.add(link)
         if len(self.playlist.playque) == 1:
             return await self.play_youtube(link)
+        self.preload_youtube(link)
         return True
 
     def convert_to_youtube_link(self, title):
@@ -500,31 +592,15 @@ class AudioController(object):
                 continue
             if self.is_recent_or_current_result(result, current_id, current_url, current_title):
                 continue
+            self.preload_youtube(url)
             return url
         return None
 
     async def play_youtube(self, youtube_link):
         """Downloads and plays the audio of the youtube link passed"""
 
-        youtube_link = youtube_link.split("&list=")[0]
-
-        try:
-            with yt_dlp.YoutubeDL(build_ytdlp_options(YTDLP_OPTIONS)) as downloader:
-                extracted_info = downloader.extract_info(youtube_link, download=False)
-        # "format" is not available for livestreams - redownload the page with no options
-        except Exception as first_error:
-            try:
-                fallback_options = build_ytdlp_options(YTDLP_OPTIONS)
-                fallback_options.pop('format', None)
-                with yt_dlp.YoutubeDL(fallback_options) as downloader:
-                    extracted_info = downloader.extract_info(youtube_link, download=False)
-            except Exception as second_error:
-                print("Could not extract youtube audio from:", youtube_link)
-                traceback.print_exception(type(first_error), first_error, first_error.__traceback__)
-                print("Could not extract youtube audio with fallback from:", youtube_link)
-                traceback.print_exception(type(second_error), second_error, second_error.__traceback__)
-                self.next_song(None)
-                return False
+        youtube_link = self.get_extract_cache_key(youtube_link)
+        extracted_info = await self.get_extracted_info(youtube_link)
 
         if extracted_info is None or extracted_info.get('url') is None:
             print("Could not extract a playable audio URL from:", youtube_link)
@@ -540,6 +616,7 @@ class AudioController(object):
         self.remember_played_track(extracted_info)
         self.current_track_url = extracted_info.get('webpage_url') or youtube_link
         self.current_autoplay_url = self.get_autoplay_url(extracted_info)
+        self.preload_next_song()
         self.current_songinfo = Songinfo(extracted_info.get('uploader'), extracted_info.get('creator'),
                                          extracted_info.get('title'), extracted_info.get('duration'),
                                          extracted_info.get('like_count'), extracted_info.get('dislike_count'),
@@ -569,6 +646,7 @@ class AudioController(object):
             return
         self.playlist.next()
         self.playlist.playque.clear()
+        self.cancel_preloads()
         self.skip_requested = True
         self.guild.voice_client.stop()
         await self.guild.me.edit(nick=config.DEFAULT_NICKNAME)
