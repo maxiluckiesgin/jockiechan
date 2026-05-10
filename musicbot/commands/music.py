@@ -287,6 +287,9 @@ class Music(commands.Cog):
         if current_guild.voice_client is None or not current_guild.voice_client.is_paused():
             await ctx.send("Nothing is paused.")
             return
+        general_cog = self.bot.get_cog("General")
+        if general_cog is not None:
+            general_cog.start_pomodoro_break(current_guild)
         current_guild.voice_client.resume()
         await ctx.send("Resumed.")
 

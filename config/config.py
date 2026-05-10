@@ -42,6 +42,8 @@ HELP_LEAVE_SHORT = "Leave voicechannel"
 HELP_LEAVE_LONG = "Disconnects the bot from its current voicechannel."
 HELP_SET_SHORT = "Set voice disconnect timer"
 HELP_SET_LONG = "Disconnects a mentioned user after they have been inactive for the timer duration."
+HELP_POMODORO_SHORT = "Start a Pomodoro timer"
+HELP_POMODORO_LONG = "Starts a 25 minute focus timer. After focus, !resume starts a 5 minute break."
 
 HELP_HISTORY_SHORT = "Show history of songs"
 HELP_HISTORY_LONG = "Shows the " + str(MAX_TRACKNAME_HISTORY_LENGTH) + " last played songs."
