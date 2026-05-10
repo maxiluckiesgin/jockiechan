@@ -34,6 +34,27 @@ class Music(commands.Cog):
             return str(hours) + ":" + str(minutes).zfill(2) + ":" + str(seconds).zfill(2)
         return str(minutes) + ":" + str(seconds).zfill(2)
 
+    async def animate_progress(self, message, label):
+        position = 0
+        width = 12
+        try:
+            while True:
+                bar = ["-"] * width
+                bar[position % width] = "#"
+                await message.edit(content="```" + label + "\n[" + "".join(bar) + "]```")
+                position += 1
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            return
+
+    async def finish_progress(self, progress_task, message, content):
+        progress_task.cancel()
+        try:
+            await progress_task
+        except asyncio.CancelledError:
+            pass
+        await message.edit(content=content)
+
     def parse_lyrics_query(self, query, songinfo=None):
         if query is not None and not query.isspace():
             query = query.strip()
@@ -152,20 +173,21 @@ class Music(commands.Cog):
             await ctx.send("Search query is empty.")
             return
 
-        status_message = await ctx.send("Processing search...")
+        status_message = await ctx.send("```Searching\n[#-----------]```")
+        progress_task = self.bot.loop.create_task(self.animate_progress(status_message, "Searching"))
         audiocontroller = utils.guild_to_audiocontroller[current_guild]
         audiocontroller.announce_channel = ctx.channel
         results = audiocontroller.search_youtube(query, limit=1)
         if not results:
-            await status_message.edit(content="No results found for: " + query)
+            await self.finish_progress(progress_task, status_message, "No results found for: " + query)
             return
 
         result = results[0]
         added = await audiocontroller.add_youtube(result['url'])
         if added:
-            await status_message.edit(content="Queued or playing: " + result['title'] + " (" + self.format_duration(result.get('duration')) + ")")
+            await self.finish_progress(progress_task, status_message, "Queued or playing: " + result['title'] + " (" + self.format_duration(result.get('duration')) + ")")
         else:
-            await status_message.edit(content="Could not play first result for: " + query)
+            await self.finish_progress(progress_task, status_message, "Could not play first result for: " + query)
 
     @commands.command(name='pause', description=config.HELP_PAUSE_SHORT, help=config.HELP_PAUSE_SHORT)
     async def _pause(self, ctx):
@@ -198,9 +220,10 @@ class Music(commands.Cog):
                 not current_guild.voice_client.is_paused() and not current_guild.voice_client.is_playing()):
             await ctx.send("Nothing is playing.")
             return
-        status_message = await ctx.send("Processing skip...")
+        status_message = await ctx.send("```Skipping\n[#-----------]```")
+        progress_task = self.bot.loop.create_task(self.animate_progress(status_message, "Skipping"))
         utils.guild_to_audiocontroller[current_guild].skip()
-        await status_message.edit(content="Skipped.")
+        await self.finish_progress(progress_task, status_message, "Skipped.")
 
     @commands.command(name='loop', description=config.HELP_LOOP_SHORT, help=config.HELP_LOOP_SHORT)
     async def _loop(self, ctx, enabled: bool = None):
